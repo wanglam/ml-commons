@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Collection;
 
 import org.opensearch.action.ActionListener;
 import org.opensearch.action.index.IndexRequest;
@@ -30,7 +31,6 @@ import org.opensearch.action.support.WriteRequest;
 import org.opensearch.action.update.UpdateRequest;
 import org.opensearch.action.update.UpdateResponse;
 import org.opensearch.client.Client;
-import org.opensearch.common.Strings;
 import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.xcontent.ToXContent;
@@ -49,6 +49,31 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 
 import lombok.extern.log4j.Log4j2;
+
+
+/**
+ * String utility class.
+ *
+ * @opensearch.internal
+ */
+ class StringsUtil {
+
+  /**
+   * Copy the given Collection into a String array.
+   * The Collection must contain String elements only.
+   *
+   * @param collection the Collection to copy
+   * @return the String array (<code>null</code> if the passed-in
+   *         Collection was <code>null</code>)
+   */
+  public static String[] toStringArray(Collection<String> collection) {
+    if (collection == null) {
+      return null;
+    }
+    return collection.toArray(new String[collection.size()]);
+  }
+}
+
 
 /**
  * MLTaskManager is responsible for managing MLTask.
@@ -193,7 +218,7 @@ public class MLTaskManager {
      * @return an array of all the keys in the taskCaches
      */
     public String[] getAllTaskIds() {
-        return Strings.toStringArray(taskCaches.keySet());
+        return StringsUtil.toStringArray(taskCaches.keySet());
     }
 
     /**

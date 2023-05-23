@@ -14,16 +14,161 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.Collection;
+import java.util.TreeSet;
 
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Strings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.ml.common.CommonValue;
 import org.opensearch.ml.utils.MLNodeUtils;
 
 import lombok.extern.log4j.Log4j2;
+
+class StringsUtil {
+
+  public static final String[] EMPTY_ARRAY = new String[0];
+
+  /**
+   * Copy the given Collection into a String array.
+   * The Collection must contain String elements only.
+   *
+   * @param collection the Collection to copy
+   * @return the String array (<code>null</code> if the passed-in
+   *         Collection was <code>null</code>)
+   */
+  public static String[] toStringArray(Collection<String> collection) {
+    if (collection == null) {
+      return null;
+    }
+    return collection.toArray(new String[collection.size()]);
+  }
+
+
+  /**
+   * Take a String which is a delimited list and convert it to a String array.
+   * <p>A single delimiter can consists of more than one character: It will still
+   * be considered as single delimiter string, rather than as bunch of potential
+   * delimiter characters - in contrast to <code>tokenizeToStringArray</code>.
+   *
+   * @param str       the input String
+   * @param delimiter the delimiter between elements (this is a single delimiter,
+   *                  rather than a bunch individual delimiter characters)
+   * @return an array of the tokens in the list
+   * @see #tokenizeToStringArray
+   */
+  public static String[] delimitedListToStringArray(String str, String delimiter) {
+    return delimitedListToStringArray(str, delimiter, null);
+  }
+
+  /**
+   * Take a String which is a delimited list and convert it to a String array.
+   * <p>A single delimiter can consists of more than one character: It will still
+   * be considered as single delimiter string, rather than as bunch of potential
+   * delimiter characters - in contrast to <code>tokenizeToStringArray</code>.
+   *
+   * @param str           the input String
+   * @param delimiter     the delimiter between elements (this is a single delimiter,
+   *                      rather than a bunch individual delimiter characters)
+   * @param charsToDelete a set of characters to delete. Useful for deleting unwanted
+   *                      line breaks: e.g. "\r\n\f" will delete all new lines and line feeds in a String.
+   * @return an array of the tokens in the list
+   * @see #tokenizeToStringArray
+   */
+  public static String[] delimitedListToStringArray(String str, String delimiter, String charsToDelete) {
+    if (str == null) {
+      return EMPTY_ARRAY;
+    }
+    if (delimiter == null) {
+      return new String[] { str };
+    }
+    List<String> result = new ArrayList<>();
+    if ("".equals(delimiter)) {
+      for (int i = 0; i < str.length(); i++) {
+        result.add(deleteAny(str.substring(i, i + 1), charsToDelete));
+      }
+    } else {
+      int pos = 0;
+      int delPos;
+      while ((delPos = str.indexOf(delimiter, pos)) != -1) {
+        result.add(deleteAny(str.substring(pos, delPos), charsToDelete));
+        pos = delPos + delimiter.length();
+      }
+      if (str.length() > 0 && pos <= str.length()) {
+        // Add rest of String, but not in case of empty input.
+        result.add(deleteAny(str.substring(pos), charsToDelete));
+      }
+    }
+    return toStringArray(result);
+  }
+
+  /**
+   * Delete any character in a given String.
+   *
+   * @param inString      the original String
+   * @param charsToDelete a set of characters to delete.
+   *                      E.g. "az\n" will delete 'a's, 'z's and new lines.
+   * @return the resulting String
+   */
+  public static String deleteAny(String inString, String charsToDelete) {
+    if (!hasLength(inString) || !hasLength(charsToDelete)) {
+      return inString;
+    }
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < inString.length(); i++) {
+      char c = inString.charAt(i);
+      if (charsToDelete.indexOf(c) == -1) {
+        sb.append(c);
+      }
+    }
+    return sb.toString();
+  }
+
+
+  /**
+   * Check that the given CharSequence is neither <code>null</code> nor of length 0.
+   * Note: Will return <code>true</code> for a CharSequence that purely consists of whitespace.
+   * <pre>
+   * StringUtils.hasLength(null) = false
+   * StringUtils.hasLength("") = false
+   * StringUtils.hasLength(" ") = true
+   * StringUtils.hasLength("Hello") = true
+   * </pre>
+   *
+   * @param str the CharSequence to check (may be <code>null</code>)
+   * @return <code>true</code> if the CharSequence is not null and has length
+   * @see #hasText(String)
+   */
+  public static boolean hasLength(CharSequence str) {
+    return (str != null && str.length() > 0);
+  }
+
+  /**
+   * Convert a CSV list into an array of Strings.
+   *
+   * @param str the input String
+   * @return an array of Strings, or the empty array in case of empty input
+   */
+  public static String[] commaDelimitedListToStringArray(String str) {
+    return delimitedListToStringArray(str, ",");
+  }
+
+  /**
+   * Convenience method to convert a CSV string list to a set.
+   * Note that this will suppress duplicates.
+   *
+   * @param str the input String
+   * @return a Set of String entries in the list
+   */
+  public static Set<String> commaDelimitedListToSet(String str) {
+    Set<String> set = new TreeSet<>();
+    String[] tokens = commaDelimitedListToStringArray(str);
+    set.addAll(Arrays.asList(tokens));
+    return set;
+  }
+}
+
 
 @Log4j2
 public class DiscoveryNodeHelper {
@@ -37,10 +182,10 @@ public class DiscoveryNodeHelper {
         eligibleNodeFilter = new HotDataNodePredicate();
         onlyRunOnMLNode = ML_COMMONS_ONLY_RUN_ON_ML_NODE.get(settings);
         clusterService.getClusterSettings().addSettingsUpdateConsumer(ML_COMMONS_ONLY_RUN_ON_ML_NODE, it -> onlyRunOnMLNode = it);
-        excludedNodeNames = Strings.commaDelimitedListToSet(ML_COMMONS_EXCLUDE_NODE_NAMES.get(settings));
+        excludedNodeNames = StringsUtil.commaDelimitedListToSet(ML_COMMONS_EXCLUDE_NODE_NAMES.get(settings));
         clusterService
             .getClusterSettings()
-            .addSettingsUpdateConsumer(ML_COMMONS_EXCLUDE_NODE_NAMES, it -> excludedNodeNames = Strings.commaDelimitedListToSet(it));
+            .addSettingsUpdateConsumer(ML_COMMONS_EXCLUDE_NODE_NAMES, it -> excludedNodeNames = StringsUtil.commaDelimitedListToSet(it));
     }
 
     public String[] getEligibleNodeIds() {
